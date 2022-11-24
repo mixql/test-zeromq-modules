@@ -1,0 +1,1 @@
+class BrakeException extends Exception{}

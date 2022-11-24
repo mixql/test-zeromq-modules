@@ -1,0 +1,48 @@
+syntax = "proto3";
+option java_multiple_files = true;
+
+option java_package = "app.zio.grpc.remote";
+
+option java_outer_classname = "ZioRemoteProto"; //??
+option objc_class_prefix = "RTG"; //??
+
+package ZioGrpcRemote;
+
+//service ZioGrpcRemote {
+//  rpc SendZioMsgTest1 (ZioMsgTest1) returns (ZioMsgTestReply) {}
+//  rpc SendZioMsgTest2Array (ZioMsgTest2Array) returns (ZioMsgTestReply) {}
+//  rpc SendZioMsgTest3Map (ZioMsgTest3Map) returns (ZioMsgTestReply) {}
+//  rpc SendShutDown (ShutDown) returns (ZioMsgTestReply) {} //Can it be without returns?
+//}
+
+message ZioMsgTest1{
+  string msg = 1;
+  string msg2 = 2;
+  string msg3 = 3;
+}
+
+message ShutDown{}
+
+message ZioMsgTest2Array{
+  repeated string messages = 1;
+}
+
+message ZioMsgTest3Map{
+  map<string, string> MsgMap = 1;
+}
+
+message ZioMsgTestReply{
+  string msg = 1;
+}
+
+import "google/protobuf/any.proto";
+message AnyMsg{
+  string type = 1;
+  google.protobuf.Any msg = 2;
+}
+
+message Error{
+  string msg = 1;
+}
+
+message Ready{}
