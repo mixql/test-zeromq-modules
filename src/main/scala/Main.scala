@@ -12,52 +12,66 @@ object MainServerApp {
       + " and backend port is " + portBackend + " and base path is " +
       basePath.getAbsolutePath
     )
-    val module1 = ClientModule("client-scala3-1", "scala3-1", host, portFrontend, portBackend,
-      new File(basePath.getAbsolutePath))
-    val module2 = ClientModule("client--scala3-2", "scala3-2", host, portFrontend, portBackend,
-      new File(basePath.getAbsolutePath))
-    val module3 = ClientModule("client-scala3-3", "scala3-3", host, portFrontend, portBackend,
-      new File(basePath.getAbsolutePath))
+
+    val module1 = ClientModule("client-scala3-1", "scala3-1", "module-scala3",
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
+    val module2 = ClientModule("client--scala3-2", "scala3-2", "module-scala3",
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
+    val module3 = ClientModule("client-scala3-3", "scala3-3", "module-scala3",
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
 
     try {
       import app.zio.grpc.remote.clientMsgs.*
+      module1.sendMsg(ZioMsgTest1("hello", "scala", "3"))
       println(s"Server: Got response from module scala-3-1: " +
-        module1.sendMsg(ZioMsgTest1("hello", "scala", "3")).asInstanceOf[ZioMsgTestReply].msg
+        module1.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module2.sendMsg(ZioMsgTest1("hello", "scala", "3"))
+      println(s"Server: Got response from module scala-3-2: " +
+        module2.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module3.sendMsg(ZioMsgTest1("hello", "scala", "3"))
+      println(s"Server: Got response from module scala-3-3: " +
+        module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+
+      module1.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3")))
+      println(s"Server: Got response from module scala-3-1: " +
+        module1.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module2.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3")))
+      println(s"Server: Got response from module scala-3-2: " +
+        module2.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module3.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3")))
+      println(s"Server: Got response from module scala-3-3: " +
+        module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+
+      module1.sendMsg(ZioMsgTest3Map(
+        Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
+      )
+      println(s"Server: Got response from module scala-3-1: " +
+        module1.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module2.sendMsg(ZioMsgTest3Map(
+        Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
       )
       println(s"Server: Got response from module scala-3-2: " +
-        module2.sendMsg(ZioMsgTest1("hello", "scala", "3")).asInstanceOf[ZioMsgTestReply].msg
+        module2.recvMsg().asInstanceOf[ZioMsgTestReply].msg
+      )
+      module3.sendMsg(ZioMsgTest3Map(
+        Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
       )
       println(s"Server: Got response from module scala-3-3: " +
-        module3.sendMsg(ZioMsgTest1("hello", "scala", "3")).asInstanceOf[ZioMsgTestReply].msg
+        module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
       )
 
-      println(s"Server: Got response from module scala-3-1: " +
-        module1.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3"))).asInstanceOf[ZioMsgTestReply].msg
-      )
-      println(s"Server: Got response from module scala-3-2: " +
-        module2.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3"))).asInstanceOf[ZioMsgTestReply].msg
-      )
-      println(s"Server: Got response from module scala-3-3: " +
-        module3.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3"))).asInstanceOf[ZioMsgTestReply].msg
-      )
-
-      println(s"Server: Got response from module scala-3-1: " +
-        module1.sendMsg(ZioMsgTest3Map(
-          Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
-        ).asInstanceOf[ZioMsgTestReply].msg
-      )
-
-      println(s"Server: Got response from module scala-3-2: " +
-        module2.sendMsg(ZioMsgTest3Map(
-          Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
-        ).asInstanceOf[ZioMsgTestReply].msg
-      )
-
-      println(s"Server: Got response from module scala-3-3: " +
-        module3.sendMsg(ZioMsgTest3Map(
-          Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
-        ).asInstanceOf[ZioMsgTestReply].msg
-      )
+      //Do we need to send shutdown. Need testing
+      println(s"Server:Sending shutdown commands to modules: ")
+      module1.sendMsg(ShutDown())
+      module2.sendMsg(ShutDown())
+      module3.sendMsg(ShutDown())
     } catch {
       case e: Throwable => println("Server: Got exception: " + e.getMessage)
     } finally {

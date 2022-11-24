@@ -11,16 +11,15 @@ import org.zeromq.{SocketType, ZMQ}
 
 object ClientModule {
   var modulesNum: Int = 0
+  var broker: BrokerModule = null
 }
 
-class ClientModule(clientName: String, moduleName: String, host: String, portFrontend: Int,
+class ClientModule(clientName: String, moduleName: String, startScriptName: String, host: String, portFrontend: Int,
                    portBackend: Int, basePath: File) extends java.lang.AutoCloseable {
   var client: ZMQ.Socket = null
   var ctx: ZMQ.Context = null
 
   var clientRemoteProcess: sys.process.Process = null
-  var client: SocketChannel = null
-
 
   import ClientModule.*
 
@@ -28,6 +27,9 @@ class ClientModule(clientName: String, moduleName: String, host: String, portFro
   def sendMsg(msg: scalapb.GeneratedMessage): scalapb.GeneratedMessage = {
     if clientRemoteProcess == null then
       startModuleClient()
+      ctx = ZMQ.context(1)
+      client = ctx.socket(SocketType.REQ)
+      //set id for client
       println("server: Clientmodule " + name + " waiting for init msg")
       SocketOperations.readMsgFromSocket(client) match {
         //To-do Should be ClientMsgStartedSuccesss
@@ -40,46 +42,41 @@ class ClientModule(clientName: String, moduleName: String, host: String, portFro
     SocketOperations.readMsgFromSocket(client)
   }
 
-  // def sendMsgAsync(msg: scalapb.GeneratedMessage): Future[scalapb.GeneratedMessage] = {
-  //   Future{
-  //     sendMsg(msg)
-  //   }
-  // }
+  def recvMsg() = {
 
-  def initServerSocket() = {
-    if server == null then
-      println(s"server: ClientModule $name. Initialising socket on server side for communicating with remote module")
-      server = ServerSocketChannel.open()
-      socketAddr = new InetSocketAddress(port)
-      server.socket.bind(socketAddr)
-      modulesNum = modulesNum + 1
   }
 
   def startModuleClient() = {
-    if server == null then initServerSocket()
-    println(s"server: trying to  start module $name at " + host + " and port at " + port +
+    if broker == null then
+      modulesNum = modulesNum + 1
+      broker = new BrokerModule(portFrontend, portBackend, host)
+      println("Server: ClientModule: Starting broker messager")
+      broker.start()
+    println(s"server: trying to  start module $moduleName at " + host + " and port at " + portFrontend +
       " in " + basePath.getAbsolutePath
     )
     clientRemoteProcess = CmdOperations.runCmdNoWait(
-      Some(s"$name.bat --port $port --host $host"),
-      Some(s"$name --port $port --host $host"), basePath)
-    println("server: waiting for connection")
-    client = server.accept()
-    println(s"server: connected with ${client.getRemoteAddress.toString}")
+      Some(s"$startScriptName.bat --port $portFrontend --host $host"),
+      Some(s"$startScriptName --port $portFrontend --host $host"), basePath)
   }
 
   override def close() = {
     println("Server: Executing close")
     modulesNum = modulesNum - 1
+    if (modulesNum <= 0) {
+      println("Server: stop brocker")
+      if broker != null then
+        broker.close()
+    }
     if (client != null) {
       println("Server: close client socket")
-      client.finishConnect()
       client.close()
     }
-    if (modulesNum <= 0) {
-      println("Server: close server socket")
-      server.close()
+    if (ctx != null) {
+      println("Server: close context")
+      ctx.close()
     }
+
     if (clientRemoteProcess.isAlive()) clientRemoteProcess.exitValue()
     println("server: Remote client was shutdown")
 
