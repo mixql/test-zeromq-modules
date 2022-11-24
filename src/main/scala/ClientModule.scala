@@ -6,15 +6,17 @@ import app.zio.grpc.remote.clientMsgs.*
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.nio.channels.{ServerSocketChannel, SocketChannel}
+import org.zeromq.{SocketType, ZMQ}
 
 
 object ClientModule {
-  var server: ServerSocketChannel = null
-  var socketAddr: InetSocketAddress = null
   var modulesNum: Int = 0
 }
 
-class ClientModule(name: String, host: String, port: Int, basePath: File) extends java.lang.AutoCloseable {
+class ClientModule(clientName: String, moduleName: String, host: String, portFrontend: Int,
+                   portBackend: Int, basePath: File) extends java.lang.AutoCloseable {
+  var client: ZMQ.Socket = null
+  var ctx: ZMQ.Context = null
 
   var clientRemoteProcess: sys.process.Process = null
   var client: SocketChannel = null
