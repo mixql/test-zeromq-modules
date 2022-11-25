@@ -14,10 +14,6 @@ object BrokerModule {
   def getPortFrontend = _portFrontend
 
   def getPortBackend = _portBackend
-
-  def enginesToClients: mutable.Map[String, String] = mutable.Map()
-
-  def clientsToEngines: mutable.Map[String, String] = mutable.Map()
 }
 
 class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends java.lang.AutoCloseable {
@@ -80,9 +76,55 @@ class BrokerMainRunnable extends Runnable {
         //Receive messages from engines
         if (poller.pollin(0)) {
           //FOR PROTOCOL SEE BOOK OReilly ZeroMQ Messaging for any applications 2013 ~page 100
-          val workerAddr = backend.recv(NOFLAGS)
-        }
+          val workerAddr = backend.recv(NOFLAGS) //Received engine module identity frame
+          val workerAddrStr = String(workerAddr)
+          println(s"Broker backend : received identity $workerAddrStr from engine module")
+          backend.recv(NOFLAGS) //received empty frame
+          println(s"Broker backend : received empty frame  from engine module $workerAddrStr")
+          //Third frame is READY protobuf message or client identity frame
+          val clientID = backend.recv(NOFLAGS)
+          val clientIDStr = String(clientID)
+          if String(clientID) != "READY" then
+            //Its client's identity
+            println(s"Broker backend : received client's identity $clientIDStr")
+            backend.recv(NOFLAGS) //received empty frame
+            println(s"Broker backend : received empty frame  from engine module $workerAddrStr")
+            val msg = backend.recv(NOFLAGS)
+            println(s"Broker backend : received protobuf message from engine module $workerAddrStr")
+            println(s"Broker backend : sending clientId $clientIDStr to frontend")
+            frontend.send(clientID, ZMQ.SNDMORE)
+            println(s"Broker backend : sending empty frame to frontend")
+            frontend.send("".getBytes, ZMQ.SNDMORE)
+            println(s"Broker backend : sending protobuf message to frontend")
+            frontend.send(msg)
+          else
+            println(s"Broker: received READY msg from engine module $workerAddrStr")
+          end if
 
+          if (poller.pollin(1)) {
+            val clientAddr = frontend.recv()
+            val clientAddrStr = String(clientAddr)
+            println("Broker frontend: received client's identity " + clientAddrStr)
+            frontend.recv()
+            println(s"Broker frontend: received empty frame from $clientAddrStr")
+            val engineIdentity = frontend.recv()
+            val engineIdentityStr = String(engineIdentity)
+            println(s"Broker frontend: received engine module identity $engineIdentityStr from $clientAddrStr")
+            val request = frontend.recv()
+            println(s"Broker frontend: received request for engine module $engineIdentityStr from $clientAddrStr")
+
+            println(s"Broker frontend: sending $engineIdentityStr from $clientAddrStr to backend")
+            backend.send(engineIdentity, ZMQ.SNDMORE)
+            println(s"Broker frontend: sending epmpty frame to $engineIdentityStr from $clientAddrStr to backend")
+            backend.send("".getBytes(), ZMQ.SNDMORE)
+            println(s"Broker frontend: sending clientAddr to $engineIdentityStr from $clientAddrStr to backend")
+            backend.send(clientAddr, ZMQ.SNDMORE)
+            println(s"Broker frontend: sending epmpty frame to $engineIdentityStr from $clientAddrStr to backend")
+            backend.send("".getBytes(), ZMQ.SNDMORE)
+            println(s"Broker frontend: sending protobuf frame to $engineIdentityStr from $clientAddrStr to backend")
+            backend.send(request, NOFLAGS)
+          }
+        }
       }
     }
     catch {

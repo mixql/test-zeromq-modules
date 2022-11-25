@@ -40,7 +40,7 @@ object ModuleScalaThree {
       server.connect(s"tcp://$host:${port.toString}")
       println(s"Module $indentity: Connection established.")
       println(s"Module $indentity: Send msg to server that i am ready")
-      server.send(ProtoBufConverter.toArray(Ready()))
+      server.send("READY")
       while (true) {
         val rs = readMsgFromServerBroker()
         val clientAdrress = rs._1

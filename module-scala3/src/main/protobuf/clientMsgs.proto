@@ -45,9 +45,3 @@ message AnyMsg{
 message Error{
   string msg = 1;
 }
-
-message Ready{}
-
-message InitClient{
-  string remoteModuleName = 1;
-}

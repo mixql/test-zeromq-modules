@@ -32,9 +32,12 @@ class ClientModule(clientName: String, moduleName: String, startScriptName: Stri
       //set id for client
       client.setIdentity(clientName.getBytes)
       client.connect(s"tcp://$host:$portFrontend")
-      println("server: Clientmodule " + clientName + " send first init msg to server broker")
-      client.send(ProtoBufConverter.toArray(InitClient(moduleName)), 0)
     end if
+    println("server: Clientmodule " + clientName + " sending identity of remote module " + moduleName)
+    client.send(moduleName.getBytes, ZMQ.SNDMORE)
+    println("server: Clientmodule " + clientName + " sending empty frame to remote module" + moduleName)
+    client.send("".getBytes, ZMQ.SNDMORE)
+    println("server: Clientmodule " + clientName + " sending protobuf message to remote module" + moduleName)
     client.send(ProtoBufConverter.toArray(msg), 0)
   }
 
