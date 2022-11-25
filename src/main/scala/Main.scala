@@ -15,7 +15,7 @@ object MainServerApp {
 
     val module1 = ClientModule("client-scala3-1", "scala3-1", "module-scala3",
       host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
-    val module2 = ClientModule("client--scala3-2", "scala3-2", "module-scala3",
+    val module2 = ClientModule("client-scala3-2", "scala3-2", "module-scala3",
       host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
     val module3 = ClientModule("client-scala3-3", "scala3-3", "module-scala3",
       host, portFrontend, portBackend, new File(basePath.getAbsolutePath))

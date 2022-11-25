@@ -8,42 +8,17 @@ object BrokerModule {
   var backend: ZMQ.Socket = null
   var poller: ZMQ.Poller = null
   var threadBroker: Thread = null
-  private var _portFrontend = -1
-  private var _portBackend = -1
-
-  def getPortFrontend = _portFrontend
-
-  def getPortBackend = _portBackend
 }
 
 class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends java.lang.AutoCloseable {
 
   import BrokerModule.*
 
-  def init() = {
-    if ctx == null then
-      println("Initialising broker")
-      ctx = ZMQ.context(1)
-      frontend = ctx.socket(SocketType.ROUTER)
-      backend = ctx.socket(SocketType.ROUTER)
-      println("Broker: starting frontend router socket on " + portFrontend.toString)
-      frontend.bind(s"tcp://$host:${portFrontend.toString}")
-      println("Broker: starting backend router socket on " + portBackend.toString)
-      frontend.bind(s"tcp://$host:${portBackend.toString}")
-      _portBackend = portBackend
-      _portFrontend = portFrontend
-      println("Initialising poller")
-      poller = ctx.poller(2)
-      poller.register(backend, ZMQ.Poller.POLLIN)
-      poller.register(frontend, ZMQ.Poller.POLLIN)
-      println("initialised brocker")
-  }
-
   def start() = {
-    init()
-    if threadBroker != null then
+    if threadBroker == null then
       println("Starting broker thread")
-      threadBroker = new Thread(new BrokerMainRunnable, "BrokerMainThread")
+      threadBroker = new BrokerMainRunnable("BrokerMainThread", host, portFrontend.toString,
+        portBackend.toString)
       threadBroker.start()
   }
 
@@ -61,20 +36,40 @@ class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends ja
   }
 }
 
-class BrokerMainRunnable extends Runnable {
+class BrokerMainRunnable(name: String, host: String, portFrontend: String, portBackend: String) extends Thread(name) {
 
   import BrokerModule.*
 
+  def init(): (Int, Int) = {
+    println("Initialising broker")
+    ctx = ZMQ.context(1)
+    frontend = ctx.socket(SocketType.ROUTER)
+    backend = ctx.socket(SocketType.ROUTER)
+    println("Broker: starting frontend router socket on " + portFrontend.toString)
+    frontend.bind(s"tcp://$host:${portFrontend.toString}")
+    println("Broker: starting backend router socket on " + portBackend.toString)
+    frontend.bind(s"tcp://$host:${portBackend.toString}")
+    println("Initialising poller")
+    poller = ctx.poller(2)
+    val polBackendIndex = poller.register(backend, ZMQ.Poller.POLLIN)
+    val polFrontendIndex = poller.register(frontend, ZMQ.Poller.POLLIN)
+    println("initialised brocker")
+    println("broker : polBackendIndex: " + polBackendIndex +
+      " polFrontendIndex: " + polFrontendIndex
+    )
+    (polBackendIndex, polFrontendIndex)
+  }
+
   override def run(): Unit = {
+    val initRes = init()
     val NOFLAGS = 0
     println("Broker thread was started")
     try {
       while (!Thread.currentThread().isInterrupted()) {
         val rc = poller.poll
         if (rc == -1) throw Exception("brake")
-
         //Receive messages from engines
-        if (poller.pollin(0)) {
+        if (poller.pollin(initRes._1)) {
           //FOR PROTOCOL SEE BOOK OReilly ZeroMQ Messaging for any applications 2013 ~page 100
           val workerAddr = backend.recv(NOFLAGS) //Received engine module identity frame
           val workerAddrStr = String(workerAddr)
@@ -99,9 +94,9 @@ class BrokerMainRunnable extends Runnable {
             frontend.send(msg)
           else
             println(s"Broker: received READY msg from engine module $workerAddrStr")
-          end if
+        end if
 
-          if (poller.pollin(1)) {
+          if (poller.pollin(initRes._2)) {
             val clientAddr = frontend.recv()
             val clientAddrStr = String(clientAddr)
             println("Broker frontend: received client's identity " + clientAddrStr)

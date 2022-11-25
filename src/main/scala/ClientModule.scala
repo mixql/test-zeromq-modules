@@ -24,21 +24,22 @@ class ClientModule(clientName: String, moduleName: String, startScriptName: Stri
   import ClientModule.*
 
 
-  def sendMsg(msg: scalapb.GeneratedMessage): Boolean = {
+  def sendMsg(msg: scalapb.GeneratedMessage): Unit = {
     if clientRemoteProcess == null then
       startModuleClient()
       ctx = ZMQ.context(1)
       client = ctx.socket(SocketType.REQ)
       //set id for client
       client.setIdentity(clientName.getBytes)
-      client.connect(s"tcp://$host:$portFrontend")
+      println("server: Clientmodule " + clientName + " connected to " +
+        s"tcp://$host:$portFrontend " + client.connect(s"tcp://$host:$portFrontend"))
     end if
-    println("server: Clientmodule " + clientName + " sending identity of remote module " + moduleName)
-    client.send(moduleName.getBytes, ZMQ.SNDMORE)
-    println("server: Clientmodule " + clientName + " sending empty frame to remote module" + moduleName)
-    client.send("".getBytes, ZMQ.SNDMORE)
-    println("server: Clientmodule " + clientName + " sending protobuf message to remote module" + moduleName)
-    client.send(ProtoBufConverter.toArray(msg), 0)
+    println("server: Clientmodule " + clientName + " sending identity of remote module " + moduleName + " " +
+      client.send(moduleName.getBytes, ZMQ.SNDMORE))
+    println("server: Clientmodule " + clientName + " sending empty frame to remote module " + moduleName + " " +
+      client.send("".getBytes, ZMQ.SNDMORE))
+    println("server: Clientmodule " + clientName + " sending protobuf message to remote module " + moduleName + " " +
+      client.send(ProtoBufConverter.toArray(msg), 0))
   }
 
   def recvMsg(): scalapb.GeneratedMessage = {
