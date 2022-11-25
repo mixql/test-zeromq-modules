@@ -1,5 +1,4 @@
-import ClientModule.{modulesNum, server}
-import org.zeromq.ZMQ
+import org.zeromq.{SocketType, ZMQ}
 
 import scala.collection.mutable
 
@@ -18,8 +17,6 @@ object BrokerModule {
 
   def engines: mutable.Map[Array[Byte], Boolean] = mutable.Map()
 
-  def enginesMsgStack: mutable.Map[Array[Byte], Boolean] = mutable.Map()
-
   def clients: mutable.Map[Array[Byte], Boolean] = mutable.Map()
 }
 
@@ -31,8 +28,8 @@ class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends ja
     if ctx == null then
       println("Initialising broker")
       ctx = ZMQ.context(1)
-      frontend = ctx.socket(ZMQ.ROUTER)
-      backend = ctx.socket(ZMQ.ROUTER)
+      frontend = ctx.socket(SocketType.ROUTER)
+      backend = ctx.socket(SocketType.ROUTER)
       println("Broker: starting frontend router socket on " + portFrontend.toString)
       frontend.bind(s"tcp://$host:${portFrontend.toString}")
       println("Broker: starting backend router socket on " + portBackend.toString)

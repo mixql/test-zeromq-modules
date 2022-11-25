@@ -46,3 +46,7 @@ message Error{
 }
 
 message Ready{}
+
+message InitClient{
+  string remoteModuleName = 1;
+}

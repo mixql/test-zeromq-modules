@@ -24,61 +24,57 @@ class ClientModule(clientName: String, moduleName: String, startScriptName: Stri
   import ClientModule.*
 
 
-  def sendMsg(msg: scalapb.GeneratedMessage): scalapb.GeneratedMessage = {
+  def sendMsg(msg: scalapb.GeneratedMessage): Boolean = {
     if clientRemoteProcess == null then
       startModuleClient()
       ctx = ZMQ.context(1)
       client = ctx.socket(SocketType.REQ)
       //set id for client
-      println("server: Clientmodule " + name + " waiting for init msg")
-      SocketOperations.readMsgFromSocket(client) match {
-        //To-do Should be ClientMsgStartedSuccesss
-        case ZioMsgTestReply(msg, _) => println(s"server: Got init msg from client $name: " + msg)
-        case _: Any => throw Exception("server: Got unknown init message from client " + name)
-      }
+      client.setIdentity(clientName.getBytes)
+      client.connect(s"tcp://$host:$portFrontend")
+      println("server: Clientmodule " + clientName + " send first init msg to server broker")
+      client.send(ProtoBufConverter.toArray(InitClient(moduleName)), 0)
     end if
-
-    SocketOperations.writeMsgToSocket(client, msg)
-    SocketOperations.readMsgFromSocket(client)
+    client.send(ProtoBufConverter.toArray(msg), 0)
   }
 
-  def recvMsg() = {
-
+  def recvMsg(): scalapb.GeneratedMessage = {
+    ProtoBufConverter.toProtobuf(client.recv(0))
   }
 
   def startModuleClient() = {
     if broker == null then
       modulesNum = modulesNum + 1
       broker = new BrokerModule(portFrontend, portBackend, host)
-      println("Server: ClientModule: Starting broker messager")
+      println(s"Server: ClientModule $clientName: Starting broker messager")
       broker.start()
-    println(s"server: trying to  start module $moduleName at " + host + " and port at " + portFrontend +
-      " in " + basePath.getAbsolutePath
+    println(s"server: ClientModule: $clientName trying to  start module $moduleName at " + host +
+      " and port at " + portBackend + " in " + basePath.getAbsolutePath
     )
     clientRemoteProcess = CmdOperations.runCmdNoWait(
-      Some(s"$startScriptName.bat --port $portFrontend --host $host"),
-      Some(s"$startScriptName --port $portFrontend --host $host"), basePath)
+      Some(s"$startScriptName.bat --port $portBackend --host $host --identity $moduleName"),
+      Some(s"$startScriptName --port $portBackend --host $host --identity $moduleName"), basePath)
   }
 
   override def close() = {
-    println("Server: Executing close")
+    println(s"Server: ClientModule: $clientName: Executing close")
     modulesNum = modulesNum - 1
     if (modulesNum <= 0) {
-      println("Server: stop brocker")
+      println(s"Server: stop brocker")
       if broker != null then
         broker.close()
     }
     if (client != null) {
-      println("Server: close client socket")
+      println(s"Server: ClientModule: $clientName: close client socket")
       client.close()
     }
     if (ctx != null) {
-      println("Server: close context")
+      println(s"Server: ClientModule: $clientName: close context")
       ctx.close()
     }
 
     if (clientRemoteProcess.isAlive()) clientRemoteProcess.exitValue()
-    println("server: Remote client was shutdown")
+    println(s"server: ClientModule: $clientName: Remote client was shutdown")
 
   }
 }
