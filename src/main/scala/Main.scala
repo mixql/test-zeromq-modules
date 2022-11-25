@@ -21,6 +21,7 @@ object MainServerApp {
       host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
 
     try {
+      println("-------------------PHASE 1--------------------------------")
       import app.zio.grpc.remote.clientMsgs.*
       module1.sendMsg(ZioMsgTest1("hello", "scala", "3"))
       println(s"Server: Got response from module scala-3-1: " +
@@ -34,7 +35,9 @@ object MainServerApp {
       println(s"Server: Got response from module scala-3-3: " +
         module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
       )
-
+      println("----------------------------------------------------------")
+      println("")
+      println("-------------------PHASE 2--------------------------------")
       module1.sendMsg(ZioMsgTest2Array(Seq("hello", "scala", "3")))
       println(s"Server: Got response from module scala-3-1: " +
         module1.recvMsg().asInstanceOf[ZioMsgTestReply].msg
@@ -47,7 +50,9 @@ object MainServerApp {
       println(s"Server: Got response from module scala-3-3: " +
         module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
       )
-
+      println("----------------------------------------------------------")
+      println("")
+      println("-------------------PHASE 3--------------------------------")
       module1.sendMsg(ZioMsgTest3Map(
         Map("msg1" -> "hello", "msg2" -> "scala", "msg3" -> "3"))
       )
@@ -66,7 +71,9 @@ object MainServerApp {
       println(s"Server: Got response from module scala-3-3: " +
         module3.recvMsg().asInstanceOf[ZioMsgTestReply].msg
       )
+      println("----------------------------------------------------------")
 
+      println("Sending shutdown to remote modules")
       //Do we need to send shutdown. Need testing
       println(s"Server:Sending shutdown commands to modules: ")
       module1.sendMsg(ShutDown())
