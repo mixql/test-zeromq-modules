@@ -15,9 +15,9 @@ object BrokerModule {
 
   def getPortBackend = _portBackend
 
-  def engines: mutable.Map[Array[Byte], Boolean] = mutable.Map()
+  def enginesToClients: mutable.Map[String, String] = mutable.Map()
 
-  def clients: mutable.Map[Array[Byte], Boolean] = mutable.Map()
+  def clientsToEngines: mutable.Map[String, String] = mutable.Map()
 }
 
 class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends java.lang.AutoCloseable {
@@ -77,7 +77,7 @@ class BrokerMainRunnable extends Runnable {
         val rc = poller.poll
         if (rc == -1) throw Exception("brake")
 
-        //Receive msgs from
+        //Receive messages from engines
         if (poller.pollin(0)) {
           //FOR PROTOCOL SEE BOOK OReilly ZeroMQ Messaging for any applications 2013 ~page 100
           val workerAddr = backend.recv(NOFLAGS)
