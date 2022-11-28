@@ -75,10 +75,10 @@ object MainServerApp {
 
       println("Sending shutdown to remote modules")
       //Do we need to send shutdown. Need testing
-      println(s"Server:Sending shutdown commands to modules: ")
-      module1.sendMsg(ShutDown())
-      module2.sendMsg(ShutDown())
-      module3.sendMsg(ShutDown())
+//      println(s"Server:Sending shutdown commands to modules: ")
+//      module1.sendMsg(ShutDown())
+//      module2.sendMsg(ShutDown())
+//      module3.sendMsg(ShutDown())
     } catch {
       case e: Throwable => println("Server: Got exception: " + e.getMessage)
     } finally {

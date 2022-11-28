@@ -25,8 +25,11 @@ lazy val `zio-server-main` = project
     }
   )
 
+lazy val `ZHelpersLib` = project
+  .in(file("zhelpers-lib"))
+
 lazy val `remoteClientScala3` = project
-  .in(file("module-scala3"))
+  .in(file("module-scala3")).dependsOn(`ZHelpersLib`)
 
 lazy val stageAll = taskKey[Unit]("Stage all projects")
 lazy val prePackArchive = taskKey[Unit]("Prepare project before making tar.gz")
