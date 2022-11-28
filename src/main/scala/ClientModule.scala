@@ -48,13 +48,13 @@ class ClientModule(clientName: String, moduleName: String, startScriptName: Stri
 
   def startModuleClient() = {
     if broker == null then
-      modulesNum = modulesNum + 1
       broker = new BrokerModule(portFrontend, portBackend, host)
       println(s"Server: ClientModule $clientName: Starting broker messager")
       broker.start()
     println(s"server: ClientModule: $clientName trying to  start module $moduleName at " + host +
       " and port at " + portBackend + " in " + basePath.getAbsolutePath
     )
+    modulesNum = modulesNum + 1
     clientRemoteProcess = CmdOperations.runCmdNoWait(
       Some(s"$startScriptName.bat --port $portBackend --host $host --identity $moduleName"),
       Some(s"$startScriptName --port $portBackend --host $host --identity $moduleName"), basePath)
@@ -77,8 +77,8 @@ class ClientModule(clientName: String, moduleName: String, startScriptName: Stri
       ctx.close()
     }
 
-    if (clientRemoteProcess.isAlive()) clientRemoteProcess.exitValue()
-    println(s"server: ClientModule: $clientName: Remote client was shutdown")
+//    if (clientRemoteProcess.isAlive()) clientRemoteProcess.exitValue()
+//    println(s"server: ClientModule: $clientName: Remote client was shutdown")
 
   }
 }

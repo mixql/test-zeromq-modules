@@ -79,6 +79,7 @@ object ModuleScalaThree {
       if ctx != null then
         ctx.term()
     }
+    println(s"Module $indentity: Stopped.")
   }
 
   def sendMsgToServerBroker(clientAdrress: Array[Byte], msg: scalapb.GeneratedMessage) = {

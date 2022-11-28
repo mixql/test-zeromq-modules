@@ -29,16 +29,17 @@ class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends ja
   }
 
   override def close() = {
-    println("Broker: Executing close")
-    if (threadBroker != null && threadBroker.isAlive())
+    if (threadBroker != null && threadBroker.isAlive() && !threadBroker.isInterrupted)
+      println("Broker: Executing close")
+      println("Broker: send interrupt to thread")
       threadBroker.interrupt()
-      println("Waiting while broker thread is alive")
-      try {
-        threadBroker.join();
-      }
-      catch
-        case _: InterruptedException => System.out.printf("%s has been interrupted", threadBroker.getName())
-    println("server: Broker was shutdown")
+//      println("Waiting while broker thread is alive")
+//      try {
+//        threadBroker.join();
+//      }
+//      catch
+//        case _: InterruptedException => System.out.printf("%s has been interrupted", threadBroker.getName())
+//      println("server: Broker was shutdown")
   }
 }
 
@@ -71,8 +72,9 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
     println("Broker thread was started")
     try {
       while (!Thread.currentThread().isInterrupted()) {
-        val rc = poller.poll
+        val rc = poller.poll(1000)
         if (rc == -1) throw Exception("brake")
+        println("ThreadInterrupted: " + Thread.currentThread().isInterrupted())
         //Receive messages from engines
         if (poller.pollin(initRes._1)) {
           val (workerAddrStr, ready, clientIDStr, msg) = receiveMessageFromBackend()
@@ -81,9 +83,7 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
               if !engines.contains(workerAddrStr) then
                 println(s"Broker: Add $workerAddrStr as key in engines set")
                 engines.add(workerAddrStr) //only this thread will write, so there will be no race condition
-              else
                 sendStashedMessagesToBackendIfTheyAre(workerAddrStr)
-              end if
             case None => //its message from engine to client
               sendMessageToFrontend(clientIDStr.get, msg.get)
           end match
@@ -100,25 +100,31 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
     }
     catch {
       case e: Throwable => println("Broker main thread: Got Exception: " + e.getMessage)
-    }
+    }finally {
+      if (backend != null) {
+        println("Broker: closing backend")
+        backend.close()
+      }
+      if frontend != null then
+        println("Broker: closing frontend")
+        frontend.close()
 
-    if (backend != null) {
-      println("Broker: closing backend")
-      backend.close()
-    }
-    if frontend != null then
-      println("Broker: closing frontend")
-      frontend.close()
+      if poller != null then {
+        println("Broker: close poll")
+        poller.close()
+      }
 
-    if poller != null then {
-      println("Broker: close poll")
-      poller.close()
+      try {
+        if ctx != null then {
+          println("Broker: terminate context")
+//          ctx.term()
+          ctx.close()
+        }
+      }catch{
+        case e: Throwable => println("Warning error while closing broker context: " + e.getMessage)
+      }
     }
-
-    if ctx != null then {
-      println("Broker: terminate context")
-      ctx.term()
-    }
+    println("Broker thread finished...")
   }
 
   def receiveMessageFromBackend(): (String, Option[String], Option[String], Option[Array[Byte]]) = {
