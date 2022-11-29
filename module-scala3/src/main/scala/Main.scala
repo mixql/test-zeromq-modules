@@ -13,11 +13,17 @@ import app.zio.grpc.remote.clientMsgs.*
 import org.zeromq.{SocketType, ZMQ}
 
 import scala.annotation.tailrec
+import com.github.nscala_time.time.Imports.*
 
 object ModuleScalaThree {
   var ctx: ZMQ.Context = null
   var server: ZMQ.Socket = null
   var appArgs: AppArgs = null
+  var poller: ZMQ.Poller = null
+
+  val heartBeatInterval: Long =  15000
+  var processStart: DateTime = null
+
 
   def main(args: Array[String]): Unit = {
     appArgs = AppArgs(args)
@@ -39,45 +45,67 @@ object ModuleScalaThree {
       server.setIdentity(appArgs.identity.toOption.get.getBytes)
       println(s"Module $indentity: connected: " + server.connect(s"tcp://$host:${port.toString}"))
       println(s"Module $indentity: Connection established.")
+
+      println("Setting processStart for timer")
+      //Set timer
+      processStart = DateTime.now()
+
+      println("Setting poller")
+      poller = ctx.poller(1)
+      println("Register pollin in poller")
+      val pollInIndex = poller.register(server, ZMQ.Poller.POLLIN)
+
       println(s"Module $indentity: sending empty frame")
       server.send("".getBytes(), ZMQ.SNDMORE) //Send empty frame
       println(s"Module $indentity: Send msg to server that i am ready " +
         server.send("READY"))
+
       while (true) {
-        val rs = readMsgFromServerBroker()
-        val clientAdrress = rs._1
-        val clientAdressStr = String(clientAdrress)
-        println(s"Module $indentity: have received message from server ${clientAdressStr}")
-        val msg = rs._2
-        ProtoBufConverter.toProtobuf(msg) match {
-          case ZioMsgTest1(msg, msg2, msg3, _) =>
-            println(s"Module $indentity: Received ZioMsgTest1 msg from server: ${msg} ${msg2} ${msg3}")
-            println(s"Module $indentity: Sending reply on ZioMsgTest1 msg")
-            sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-              "successfully received ZioMsgTest1"))
-          case ZioMsgTest2Array(messages, _) =>
-            println(s"Module $indentity :Received ZioMsgTest2Array msg from server $clientAdressStr: " +
-              s"${messages.mkString(" ")}")
-            println(s"Module $indentity: Sending reply on ZioMsgTest2Array msg")
-            sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-              "successfully received ZioMsgTest2Array"))
-          case ZioMsgTest3Map(msgMap, _) =>
-            println(s"Module $indentity: Received ZioMsgTest3Map msg from server: ${msgMap.mkString(" ")}")
-            println(s"Module $indentity:  Sending reply on ZioMsgTest3Map msg")
-            sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-              "successfully received ZioMsgTest3Map"))
-          case ShutDown(_) =>
-            println(s"Module $indentity: Started shutdown")
-            throw BrakeException()
+        val rc = poller.poll(1000)
+//        if (rc == 1) throw BrakeException()
+        if (poller.pollin(pollInIndex)) {
+          println("Setting processStart for timer, as message was received")
+          val rs = readMsgFromServerBroker()
+          val clientAdrress = rs._1
+          val clientAdressStr = String(clientAdrress)
+          println(s"Module $indentity: have received message from server ${clientAdressStr}")
+          val msg = rs._2
+          ProtoBufConverter.toProtobuf(msg) match {
+            case ZioMsgTest1(msg, msg2, msg3, _) =>
+              println(s"Module $indentity: Received ZioMsgTest1 msg from server: ${msg} ${msg2} ${msg3}")
+              println(s"Module $indentity: Sending reply on ZioMsgTest1 msg")
+              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                "successfully received ZioMsgTest1"))
+            case ZioMsgTest2Array(messages, _) =>
+              println(s"Module $indentity :Received ZioMsgTest2Array msg from server $clientAdressStr: " +
+                s"${messages.mkString(" ")}")
+              println(s"Module $indentity: Sending reply on ZioMsgTest2Array msg")
+              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                "successfully received ZioMsgTest2Array"))
+            case ZioMsgTest3Map(msgMap, _) =>
+              println(s"Module $indentity: Received ZioMsgTest3Map msg from server: ${msgMap.mkString(" ")}")
+              println(s"Module $indentity:  Sending reply on ZioMsgTest3Map msg")
+              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                "successfully received ZioMsgTest3Map"))
+            case ShutDown(_) =>
+              println(s"Module $indentity: Started shutdown")
+              throw BrakeException()
+          }
+          processStart = DateTime.now()
         }
+        val elapsed =  (processStart to DateTime.now()).millis
+        println(s"Module $indentity: elapsed: " + elapsed)
+        if (elapsed > heartBeatInterval) throw BrakeException()
       }
     } catch {
-      case _: BrakeException =>
+      case _: BrakeException => println(s"Module $indentity: BrakeException")
       case ex: Exception =>
         println(s"Module $indentity: Error: " + ex.getMessage)
     } finally {
       if server != null then
         server.close()
+      if poller != null then
+        poller.close()
       if ctx != null then
         ctx.term()
     }
@@ -113,12 +141,7 @@ object ModuleScalaThree {
     println(s"$indentity readMsgFromServerBroker: got client address: " + String(clientAdrress))
     if server.recv(0) == null then throw new BrakeException() //empty frame
     println(s"$indentity readMsgFromServerBroker: received empty frame")
-//    if server.recv(0) == null then throw new BrakeException() //empty frame
-//    println(s"$indentity readMsgFromServerBroker: received empty frame")
-
     (clientAdrress, server.recv(0))
-//    ZHelpers.dump(server)
-//    null
   }
 }
 
