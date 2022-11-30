@@ -15,6 +15,9 @@ import org.zeromq.{SocketType, ZMQ}
 import scala.annotation.tailrec
 import com.github.nscala_time.time.Imports.*
 
+import scala.concurrent.{Await, Future}
+import scala.language.postfixOps
+
 object ModuleScalaThree {
   var ctx: ZMQ.Context = null
   var server: ZMQ.Socket = null
@@ -73,24 +76,24 @@ object ModuleScalaThree {
               ProtoBufConverter.toProtobuf(msg.get) match {
                 case ZioMsgTest1(msg, msg2, msg3, _) =>
                   println(s"Module $indentity: Received ZioMsgTest1 msg from server: ${msg} ${msg2} ${msg3}")
-                  println(s"Module $indentity: Executing command for 5sec")
-                  Thread.sleep(5000)
+//                  println(s"Module $indentity: Executing command for 5sec")
+//                  Thread.sleep(5000)
                   println(s"Module $indentity: Sending reply on ZioMsgTest1 msg")
                   sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
                     "successfully received ZioMsgTest1"))
                 case ZioMsgTest2Array(messages, _) =>
                   println(s"Module $indentity :Received ZioMsgTest2Array msg from server $clientAdressStr: " +
                     s"${messages.mkString(" ")}")
-                  println(s"Module $indentity: Executing command for 25sec")
-                  Thread.sleep(25000)
+//                  println(s"Module $indentity: Executing command for 25sec")
+//                  Thread.sleep(25000)
                   println(s"Module $indentity: Sending reply on ZioMsgTest2Array msg")
                   sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
                     "successfully received ZioMsgTest2Array"))
                 case ZioMsgTest3Map(msgMap, _) =>
                   println(s"Module $indentity: Received ZioMsgTest3Map msg from server: ${msgMap.mkString(" ")}")
                   println(s"Module $indentity:  Sending reply on ZioMsgTest3Map msg")
-                  println(s"Module $indentity: Executing command for 12sec")
-                  Thread.sleep(12000)
+//                  println(s"Module $indentity: Executing command for 12sec")
+//                  Thread.sleep(12000)
                   sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
                     "successfully received ZioMsgTest3Map"))
                 case ShutDown(_) =>
@@ -120,12 +123,28 @@ object ModuleScalaThree {
       case ex: Exception =>
         println(s"Module $indentity: Error: " + ex.getMessage)
     } finally {
+
       if server != null then
+        println(s"Module $indentity: finally close server")
         server.close()
+
+
       if poller != null then
+        println(s"Module $indentity: finally close poller")
         poller.close()
-      if ctx != null then
-        ctx.term()
+
+
+      try {
+
+        if ctx != null then
+          println(s"Module $indentity: finally close context")
+          implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+          Await.result(Future {
+            ctx.term()
+          }, scala.concurrent.duration.Duration(5000, "millis"))
+      }catch{
+        case e: Throwable => println(s"Module $indentity: tiemout of closing context exceeded:(")
+      }
     }
     println(s"Module $indentity: Stopped.")
   }

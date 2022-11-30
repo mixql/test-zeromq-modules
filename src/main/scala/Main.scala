@@ -13,12 +13,16 @@ object MainServerApp {
       basePath.getAbsolutePath
     )
 
+    val broker: BrokerModule = new BrokerModule(portFrontend, portBackend, host)
+    println(s"Server: Starting broker messager")
+    broker.start()
+
     val module1 = ClientModule("client-scala3-1", "scala3-1", "module-scala3",
-      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath), broker)
     val module2 = ClientModule("client-scala3-2", "scala3-2", "module-scala3",
-      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath), broker)
     val module3 = ClientModule("client-scala3-3", "scala3-3", "module-scala3",
-      host, portFrontend, portBackend, new File(basePath.getAbsolutePath))
+      host, portFrontend, portBackend, new File(basePath.getAbsolutePath), broker)
 
     try {
       println("-------------------PHASE 1--------------------------------")
@@ -82,9 +86,13 @@ object MainServerApp {
     } catch {
       case e: Throwable => println("Server: Got exception: " + e.getMessage)
     } finally {
+      println(s"Server: stop brocker")
+      broker.close()
+
       module1.close()
       module2.close()
       module3.close()
+
     }
   }
 
