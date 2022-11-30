@@ -33,13 +33,13 @@ class BrokerModule(portFrontend: Int, portBackend: Int, host: String) extends ja
       println("Broker: Executing close")
       println("Broker: send interrupt to thread")
       threadBroker.interrupt()
-//      println("Waiting while broker thread is alive")
-//      try {
-//        threadBroker.join();
-//      }
-//      catch
-//        case _: InterruptedException => System.out.printf("%s has been interrupted", threadBroker.getName())
-//      println("server: Broker was shutdown")
+    //      println("Waiting while broker thread is alive")
+    //      try {
+    //        threadBroker.join();
+    //      }
+    //      catch
+    //        case _: InterruptedException => System.out.printf("%s has been interrupted", threadBroker.getName())
+    //      println("server: Broker was shutdown")
   }
 }
 
@@ -77,15 +77,21 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
         println("ThreadInterrupted: " + Thread.currentThread().isInterrupted())
         //Receive messages from engines
         if (poller.pollin(initRes._1)) {
-          val (workerAddrStr, ready, clientIDStr, msg) = receiveMessageFromBackend()
+          val (workerAddrStr, ready, clientIDStr, msg, pingHeartBeatMsg) = receiveMessageFromBackend()
           ready match
             case Some(_) => //Its READY message from engine
               if !engines.contains(workerAddrStr) then
                 println(s"Broker: Add $workerAddrStr as key in engines set")
                 engines.add(workerAddrStr) //only this thread will write, so there will be no race condition
                 sendStashedMessagesToBackendIfTheyAre(workerAddrStr)
-            case None => //its message from engine to client
-              sendMessageToFrontend(clientIDStr.get, msg.get)
+            case None => //its message from engine to client or heart beat message from engine
+              pingHeartBeatMsg match {
+                case Some(_) => //Its heart beat message from engine
+                  sendMessageToBackend(s"Broker backend heart beat pong:", workerAddrStr,
+                    "PONG-HEARTBEAT".getBytes)
+                case None => //its message from engine to client
+                  sendMessageToFrontend(clientIDStr.get, msg.get)
+              }
           end match
         }
         if (poller.pollin(initRes._2)) {
@@ -100,7 +106,7 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
     }
     catch {
       case e: Throwable => println("Broker main thread: Got Exception: " + e.getMessage)
-    }finally {
+    } finally {
       if (backend != null) {
         println("Broker: closing backend")
         backend.close()
@@ -117,43 +123,49 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
       try {
         if ctx != null then {
           println("Broker: terminate context")
-//          ctx.term()
+          //          ctx.term()
           ctx.close()
         }
-      }catch{
+      } catch {
         case e: Throwable => println("Warning error while closing broker context: " + e.getMessage)
       }
     }
     println("Broker thread finished...")
   }
 
-  def receiveMessageFromBackend(): (String, Option[String], Option[String], Option[Array[Byte]]) = {
+  def receiveMessageFromBackend(): (String, Option[String], Option[String], Option[Array[Byte]], Option[String]) = {
     //FOR PROTOCOL SEE BOOK OReilly ZeroMQ Messaging for any applications 2013 ~page 100
     val workerAddr = backend.recv(NOFLAGS) //Received engine module identity frame
     val workerAddrStr = String(workerAddr)
     println(s"Broker backend : received identity $workerAddrStr from engine module")
     backend.recv(NOFLAGS) //received empty frame
     println(s"Broker backend : received empty frame  from engine module $workerAddrStr")
-    //Third frame is READY message or client identity frame
+    //Third frame is READY message or client identity frame or heart beat message from engine
     val clientID = backend.recv(NOFLAGS)
     var clientIDStr: Option[String] = Some(String(clientID))
     var msg: Option[Array[Byte]] = None
     var ready: Option[String] = None
+    var pingHeartBeat: Option[String] = None
 
     if clientIDStr.get != "READY" then
-      //Its client's identity
-      println(s"Broker backend : received client's identity $clientIDStr")
-      backend.recv(NOFLAGS) //received empty frame
-      println(s"Broker backend : received empty frame  from engine module $workerAddrStr")
-      msg = Some(backend.recv(NOFLAGS))
-      println(s"Broker backend : received protobuf message from engine module $workerAddrStr")
+      if (clientIDStr.get == "PING-HEARTBEAT") then
+        println(s"Broker: received PING-HEARTBEAT msg from engine module $workerAddrStr")
+        pingHeartBeat = Some(clientIDStr.get)
+      else
+        //Its client's identity
+        println(s"Broker backend : received client's identity $clientIDStr")
+        backend.recv(NOFLAGS) //received empty frame
+        println(s"Broker backend : received empty frame  from engine module $workerAddrStr")
+        msg = Some(backend.recv(NOFLAGS))
+        println(s"Broker backend : received protobuf message from engine module $workerAddrStr")
+      end if
     else
       println(s"Broker: received READY msg from engine module $workerAddrStr")
       ready = Some(clientIDStr.get)
       clientIDStr = None
     end if
 
-    (workerAddrStr, ready, clientIDStr, msg)
+    (workerAddrStr, ready, clientIDStr, msg, pingHeartBeat)
   }
 
   def receiveMessageFromFrontend(): (String, String, Array[Byte]) = {
@@ -192,6 +204,15 @@ class BrokerMainRunnable(name: String, host: String, portFrontend: String, portB
     println(s"$logMessagePrefix: sending epmpty frame to $engineIdentityStr from $clientAddrStr to backend")
     backend.send("".getBytes(), ZMQ.SNDMORE)
     println(s"$logMessagePrefix: sending protobuf frame to $engineIdentityStr from $clientAddrStr to backend")
+    backend.send(request, NOFLAGS)
+  }
+
+  def sendMessageToBackend(logMessagePrefix: String, engineIdentityStr: String, request: Array[Byte]) = {
+    println(s"$logMessagePrefix: sending $engineIdentityStr  to backend")
+    backend.send(engineIdentityStr.getBytes, ZMQ.SNDMORE)
+    println(s"$logMessagePrefix: sending epmpty frame to $engineIdentityStr to backend")
+    backend.send("".getBytes(), ZMQ.SNDMORE)
+    println(s"$logMessagePrefix: sending message frame to $engineIdentityStr to backend")
     backend.send(request, NOFLAGS)
   }
 

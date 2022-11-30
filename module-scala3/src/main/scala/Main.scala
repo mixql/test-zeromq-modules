@@ -21,8 +21,9 @@ object ModuleScalaThree {
   var appArgs: AppArgs = null
   var poller: ZMQ.Poller = null
 
-  val heartBeatInterval: Long =  15000
+  val heartBeatInterval: Long = 3000
   var processStart: DateTime = null
+  var liveness: Int = 3
 
 
   def main(args: Array[String]): Unit = {
@@ -55,47 +56,64 @@ object ModuleScalaThree {
       println("Register pollin in poller")
       val pollInIndex = poller.register(server, ZMQ.Poller.POLLIN)
 
-      println(s"Module $indentity: sending empty frame")
-      server.send("".getBytes(), ZMQ.SNDMORE) //Send empty frame
-      println(s"Module $indentity: Send msg to server that i am ready " +
-        server.send("READY"))
+      println(s"Module $indentity: Sending READY message to server's broker")
+      sendMsgToServerBroker("READY")
 
       while (true) {
-        val rc = poller.poll(1000)
-//        if (rc == 1) throw BrakeException()
+        val rc = poller.poll(heartBeatInterval)
+        //        if (rc == 1) throw BrakeException()
         if (poller.pollin(pollInIndex)) {
           println("Setting processStart for timer, as message was received")
-          val rs = readMsgFromServerBroker()
-          val clientAdrress = rs._1
+          val (clientAdrress,msg, pongHeartBeatMsg ) = readMsgFromServerBroker()
           val clientAdressStr = String(clientAdrress)
-          println(s"Module $indentity: have received message from server ${clientAdressStr}")
-          val msg = rs._2
-          ProtoBufConverter.toProtobuf(msg) match {
-            case ZioMsgTest1(msg, msg2, msg3, _) =>
-              println(s"Module $indentity: Received ZioMsgTest1 msg from server: ${msg} ${msg2} ${msg3}")
-              println(s"Module $indentity: Sending reply on ZioMsgTest1 msg")
-              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-                "successfully received ZioMsgTest1"))
-            case ZioMsgTest2Array(messages, _) =>
-              println(s"Module $indentity :Received ZioMsgTest2Array msg from server $clientAdressStr: " +
-                s"${messages.mkString(" ")}")
-              println(s"Module $indentity: Sending reply on ZioMsgTest2Array msg")
-              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-                "successfully received ZioMsgTest2Array"))
-            case ZioMsgTest3Map(msgMap, _) =>
-              println(s"Module $indentity: Received ZioMsgTest3Map msg from server: ${msgMap.mkString(" ")}")
-              println(s"Module $indentity:  Sending reply on ZioMsgTest3Map msg")
-              sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
-                "successfully received ZioMsgTest3Map"))
-            case ShutDown(_) =>
-              println(s"Module $indentity: Started shutdown")
-              throw BrakeException()
+          pongHeartBeatMsg match{
+            case Some(_)=> //got pong heart beat message
+              println(s"Module $indentity: got pong heart beat message from broker server")
+            case None => //got protobuf message
+              ProtoBufConverter.toProtobuf(msg.get) match {
+                case ZioMsgTest1(msg, msg2, msg3, _) =>
+                  println(s"Module $indentity: Received ZioMsgTest1 msg from server: ${msg} ${msg2} ${msg3}")
+                  println(s"Module $indentity: Executing command for 5sec")
+                  Thread.sleep(5000)
+                  println(s"Module $indentity: Sending reply on ZioMsgTest1 msg")
+                  sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                    "successfully received ZioMsgTest1"))
+                case ZioMsgTest2Array(messages, _) =>
+                  println(s"Module $indentity :Received ZioMsgTest2Array msg from server $clientAdressStr: " +
+                    s"${messages.mkString(" ")}")
+                  println(s"Module $indentity: Executing command for 25sec")
+                  Thread.sleep(25000)
+                  println(s"Module $indentity: Sending reply on ZioMsgTest2Array msg")
+                  sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                    "successfully received ZioMsgTest2Array"))
+                case ZioMsgTest3Map(msgMap, _) =>
+                  println(s"Module $indentity: Received ZioMsgTest3Map msg from server: ${msgMap.mkString(" ")}")
+                  println(s"Module $indentity:  Sending reply on ZioMsgTest3Map msg")
+                  println(s"Module $indentity: Executing command for 12sec")
+                  Thread.sleep(12000)
+                  sendMsgToServerBroker(clientAdrress, ZioMsgTestReply(s"Module $indentity to ${clientAdressStr}: " +
+                    "successfully received ZioMsgTest3Map"))
+                case ShutDown(_) =>
+                  println(s"Module $indentity: Started shutdown")
+                  throw BrakeException()
+              }
           }
           processStart = DateTime.now()
+          liveness = 3
+        } else {
+          val elapsed = (processStart to DateTime.now()).millis
+          println(s"Module $indentity: elapsed: " + elapsed)
+          liveness = liveness - 1
+          if (liveness == 0) {
+            println(s"Module $indentity: heartbeat failure, can't reach server's broker. Shutting down")
+            throw BrakeException()
+          }
+          if (elapsed >= heartBeatInterval) {
+            processStart = DateTime.now()
+            println(s"Module $indentity: heartbeat work. Sending heart beat. Liveness: " + liveness)
+            sendMsgToServerBroker("PING-HEARTBEAT")
+          }
         }
-        val elapsed =  (processStart to DateTime.now()).millis
-        println(s"Module $indentity: elapsed: " + elapsed)
-        if (elapsed > heartBeatInterval) throw BrakeException()
       }
     } catch {
       case _: BrakeException => println(s"Module $indentity: BrakeException")
@@ -112,7 +130,7 @@ object ModuleScalaThree {
     println(s"Module $indentity: Stopped.")
   }
 
-  def sendMsgToServerBroker(clientAdrress: Array[Byte], msg: scalapb.GeneratedMessage) = {
+  def sendMsgToServerBroker(clientAdrress: Array[Byte], msg: Array[Byte]): Boolean = {
     val indentity = String(appArgs.identity.toOption.get.getBytes)
     //Sending multipart message
     println(s"Module $indentity: sendMsgToServerBroker: sending empty frame")
@@ -121,11 +139,26 @@ object ModuleScalaThree {
     server.send(clientAdrress, ZMQ.SNDMORE) //First send address frame
     println(s"Module $indentity: sendMsgToServerBroker: sending empty frame")
     server.send("".getBytes(), ZMQ.SNDMORE) //Send empty frame
-    println(s"Module $indentity: sendMsgToServerBroker: sending protobuf message")
-    server.send(ProtoBufConverter.toArray(msg))
+    println(s"Module $indentity: sendMsgToServerBroker: sending message")
+    server.send(msg)
   }
 
-  def readMsgFromServerBroker(): (Array[Byte], Array[Byte]) = {
+  def sendMsgToServerBroker(msg: String): Boolean = {
+    val indentity = String(appArgs.identity.toOption.get.getBytes)
+    println(s"Module $indentity: sendMsgToServerBroker: convert msg of type String to Array of bytes")
+    println(s"Module $indentity: sending empty frame")
+    server.send("".getBytes(), ZMQ.SNDMORE) //Send empty frame
+    println(s"Module $indentity: Send msg to server ")
+    server.send(msg.getBytes())
+  }
+
+  def sendMsgToServerBroker(clientAdrress: Array[Byte], msg: scalapb.GeneratedMessage): Boolean = {
+    val indentity = String(appArgs.identity.toOption.get.getBytes)
+    println(s"Module $indentity: sendMsgToServerBroker: convert msg of type Protobuf to Array of bytes")
+    sendMsgToServerBroker(clientAdrress, ProtoBufConverter.toArray(msg))
+  }
+
+  def readMsgFromServerBroker(): (Array[Byte], Option[Array[Byte]], Option[String]) = {
     //FOR PROTOCOL SEE BOOK OReilly ZeroMQ Messaging for any applications 2013 ~page 100
     //From server broker messanger we get msg with such body:
     //indentity frame
@@ -137,11 +170,25 @@ object ModuleScalaThree {
     println(s"$indentity readMsgFromServerBroker: received empty frame")
 
     val clientAdrress = server.recv(0) //Indentity of client object on server
+    // or pong-heartbeat from broker
     if clientAdrress == null then throw new BrakeException()
-    println(s"$indentity readMsgFromServerBroker: got client address: " + String(clientAdrress))
-    if server.recv(0) == null then throw new BrakeException() //empty frame
-    println(s"$indentity readMsgFromServerBroker: received empty frame")
-    (clientAdrress, server.recv(0))
+
+    var msg: Option[Array[Byte]] = None
+
+    var pongHeartMessage: Option[String] = Some(String(clientAdrress))
+    if pongHeartMessage.get != "PONG-HEARTBEAT" then
+      pongHeartMessage = None
+
+      println(s"$indentity readMsgFromServerBroker: got client address: " + String(clientAdrress))
+
+      if server.recv(0) == null then throw new BrakeException() //empty frame
+      println(s"$indentity readMsgFromServerBroker: received empty frame")
+
+      println(s"Module $indentity: have received message from server ${String(clientAdrress)}")
+      msg = Some(server.recv(0))
+    end if
+
+    (clientAdrress, msg, pongHeartMessage)
   }
 }
 
